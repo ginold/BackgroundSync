@@ -98,7 +98,24 @@ app.use(require('connect-history-api-fallback')())
 
 // serve pure static assets
 const staticPath = path.posix.join(config.dev.assetsPublicPath, config.dev.assetsSubDirectory)
-app.use(staticPath, express.static('./static'))
+app.use(staticPath, express.static('./static', {
+    setHeaders: (res) => {
+      res.set('Service-Worker-Allowed', '/');
+    }
+}))
+
+// app.use('/', express.static(__dirname, {
+//   console.log(__dirname)
+//   setHeaders: (res) => {
+//     res.setHeader('Service-Worker-Allowed', '/');
+//   },
+// }));
+
+// handle every other route with index.html, which will contain
+// a script tag to your application's JavaScript file(s).
+app.get('*', function (request, response){
+  response.sendFile(path.resolve(__dirname, '../dist', 'index.html'))
+})
 
 const uri = 'http://localhost:' + port
 let _resolve
@@ -175,15 +192,11 @@ app.post("/newMessage", (req, res) => {
       .then(() => {
         res.sendStatus(200)
         console.log('sending server new message')
-        if (message.offline) {
-          console.log('offline message')
           // EMITS TO EVERYONE IN ROOM CHAT
           io.in('chat').emit('new message', {
             username: message.username,
-            message: message.message,
-            offline: true
+            message: message.message
           });
-        }
       })
       .catch((err) => {
         res.sendStatus(400) 
@@ -193,6 +206,21 @@ app.post("/newMessage", (req, res) => {
     console.log('subscription is not defined')
   }
 });
+app.post('/pendingMessages', (req, res) => {
+  if (subscription) {
+    const messages = req.body;
+    console.log(messages)
+    // Pass object into sendNotification   
+    for (var i = 0; i <= messages.length - 1; i++) {
+      io.in('chat').emit('new message', {
+        username: messages[i].username,
+        message: messages[i].message,
+        offline: true
+      });
+    }
+    res.sendStatus(200)
+  }
+})
 
 io.on('connection', (socket) => {onConnect(socket)});
     

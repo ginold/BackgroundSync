@@ -11,17 +11,22 @@
     </section>
 
     <section id="chatArea" v-else>
-      <h2>Welcome <b>{{username}}</b></h2>
-      <h3>Number of users: {{numUsers}}</h3>
-      <md-button class="md-accent logout" v-on:click="logout">logout</md-button>
+      <div class="top">
+        <h2>Welcome <b>{{username}}</b></h2>
+        <!-- <h3>Number of users: {{numUsers}}</h3> -->
+        <div class="buttons">
+          <md-button class="md-accent logout" v-on:click="logout">logout</md-button>
+        <md-button class="md-accent logout install" v-on:click="install">install</md-button>
+        </div>
+      </div>
       <div id="messages">
         <ul>
           <li class="message"></li>
           <li class="message" v-for="m in messages">
-             <md-card>
+             <md-card v-bind:class="{me: m.username === username.toString()}">
                <md-card-header-text>
                   <div class="md-subhead">{{m.username}}</div>
-                  <div class="time">{{ (new Date()).getHours()}}:{{(new Date()).getMinutes()}}</div>
+                  <div class="time">{{getTime()}}</div>
               </md-card-header-text>
               <md-card-content>
                 <span>{{m.message}}</span>
@@ -38,7 +43,7 @@
       </md-field>
     </section>
 
-     <md-snackbar md-position="center" :md-active.sync="showSnackbar" md-persistent :md-duration="duration">
+     <md-snackbar md-position="center" :md-active.sync="showSnackbar" :md-duration="duration">
       <span>{{snackbarText}}</span>
       <md-button class="md-primary">Ok</md-button>
     </md-snackbar>
@@ -67,7 +72,8 @@
         messages: [],
         lostConnection: false,
         showSnackbar: false,
-        duration: 5000
+        duration: 5000,
+        installPromptEvent: null
       }
     },
     components: {BackgroundSync},
@@ -78,13 +84,17 @@
         } else {
           this.snackbarText = "You're back online!"
           // remove offline indicator
-          let request = indexedDB.open("messagesDB", 1)
           console.log('back online')
         }
         this.showSnackbar = true
       }
     },
     methods: {
+      getTime() {
+        let minutes = (new Date()).getMinutes()
+        if (minutes < 10 ) minutes  = "0" + minutes
+        return (new Date()).getHours() + ":" + minutes
+      },
       goToChatArea() {
         this.showLogin = false
         io.emit('add user', this.username);
@@ -93,15 +103,17 @@
       sendMessage() {
         let message = {message: this.message, username: this.username}
         this.messages.push(message)
+
         if (!navigator.onLine || this.lostConnection) {
+          console.log('browser offline')
           message.offline = true
           this.saveMessage(message)
           this.message = ''     
           io.emit('stop typing')
         } else {
-          io.emit('new message', message)
-          io.emit('stop typing')
+
           this.message = ''     
+          io.emit('stop typing')
           return fetch('/newMessage', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -111,7 +123,6 @@
             if (response.status != 200) {
               throw new Error('Bad status code from server.');
             }
-            //io.emit('new message', message)
             return response
           })     
         }
@@ -134,16 +145,16 @@
           };
           request.onsuccess = function(event) {
             let db = event.target.result;
-            console.log("connected to db: " + db)
+            console.log("success connected to db: " + db)
             resolve(db)
           }
           request.onupgradeneeded = function(event) {
+            console.log("upgrade connected to db: " + db)
             let db = event.target.result
             if (!db.objectStoreNames.contains('messages')) {
               let messagesOS = db.createObjectStore("messages", { autoIncrement: true})
               messagesOS.createIndex('username', 'username', {unique: false});
             }       
-            resolve(db)      
              // add messages here when update or change db
           }
        })   
@@ -159,18 +170,52 @@
         io.emit('stop typing')
         this.showLogin = true
         this.username = null
+      },
+      /*
+        The way of installation has changed since Chrome 70. You need to install
+        it manually by going into settings. Prompt will not appear by clicking.
+      */
+      install() {
+        window.dispatchEvent(new Event('beforeinstallprompt'))
+      },
+      showAddToHomeScreen() {
+        // Update the install UI to notify the user app can be installed
+        document.querySelector(".install").style.display = 'none'
+        console.warn(
+        "if 'prompt is not a function' --> The way of installation has changed since Chrome 70. You need to install it manually by going into settings. Prompt will not appear by clicking."
+        )
+        this.installPromptEvent.prompt()
+        // Wait for the user to respond to the prompt
+        this.installPromptEvent.userChoice
+          .then((choiceResult) => {
+            if (choiceResult.outcome === 'accepted') {
+              console.log('User accepted the A2HS prompt');
+            } else {
+              console.log('User dismissed the A2HS prompt');
+            }
+            this.installPromptEvent = null;
+          });
       }    
     },
     mounted() {
       setTimeout(() => {this.$refs.focusable.$el.focus();}, 500);
     },
     created() {
+      window.addEventListener('beforeinstallprompt', (event) => {
+        console.log('beforeinstallprompt')
+        // Prevent Chrome <= 67 from automatically showing the prompt
+        event.preventDefault()
+        // Stash the event so it can be triggered later.
+        this.installPromptEvent = event
+        this.showAddToHomeScreen(event)
+      });
+
       io.on('user joined', (data) => {
         console.log('user joined!')
         this.numUsers = data.numUsers
         if (data.username) {
           var joinedDiv = $('<div>', {class: 'md-card joined md-primary md-accent'}).text(data.username + " has joined!")
-          $('.message:last-of-type').prepend(joinedDiv)          
+          $('.message:last-of-type').append(joinedDiv)          
         }
         
       })
@@ -180,7 +225,7 @@
         this.name = data.username
       });
       io.on('new message', (message) => {
-        //console.log('message received io client')
+        console.log('message received io client')
         if (message.username != this.username) {
           this.messages.push(message)
         }
@@ -243,6 +288,9 @@ main {
   display: block;
   margin-top: 10px;
 }
+.message .me {
+  background: teal;
+}
 .md-card-header-text {
   display: flex;
   justify-content: space-between;
@@ -265,11 +313,7 @@ main {
 .offline {
   height: 25px !important;
 }
-.logout {
-  position: absolute;
-  right: 10px;
-  top: 20px;
-}
+
 .typing {
   color: burlywood;
 }
@@ -294,5 +338,12 @@ li {
 
 a {
   color: #35495E;
+}
+.top {
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+    padding-right: 30px;
+    width: 100%;
 }
 </style>

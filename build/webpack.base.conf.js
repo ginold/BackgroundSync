@@ -22,10 +22,10 @@ module.exports = {
       : config.dev.assetsPublicPath
   },
   plugins: [
-    new WorkboxPlugin.InjectManifest({
-      swSrc: './static/sw/sw.js',
-      swDest: './static/sw/swBuild.js'
-    })
+  //  new WorkboxPlugin.InjectManifest({
+//      swSrc: './static/sw/sw.js',
+ //     swDest: './static/sw/swBuild.js'
+  //  })
   ],  
   resolve: {
     extensions: ['.js', '.vue', '.json'],

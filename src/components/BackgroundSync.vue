@@ -84,13 +84,19 @@
 		}
     },
     created() {
+   
+	window.addEventListener('appinstalled', (evt) => {
+	  console.log('installed')
+	});
+
 	window.addEventListener('load', () => {
 	    window.addEventListener('online', () => this.isOnline = true)
 	    window.addEventListener('offline', () => this.isOnline = false) 
 	})
+
 	if ('serviceWorker' in navigator && 'PushManager' in window) {
 		  // Use the window load event to keep the page load performant
-		let register = navigator.serviceWorker.register('static/sw/sw.js')
+		let register = navigator.serviceWorker.register('static/sw.js', {scope: "/"})
 
 	    register.then((swReg) => { 
 	    	this.swReg = swReg
@@ -101,20 +107,21 @@
 				applicationServerKey: this.urlBase64ToUint8Array(this.publicKey)
 			}
 			console.log("Push Registered...")
-			return swReg.pushManager.subscribe(subscription)
-		})
-		.then((pushSubscription) => {
-		    let sub = JSON.stringify(pushSubscription)
-		    let subParsed = JSON.parse(sub)
-		    const subscriptionObject = {
-			  endpoint: subParsed.endpoint,
-			  keys: {
-			    p256dh: subParsed.keys.p256dh,
-			    auth: subParsed.keys.auth
-			  }
-			};
-			this.sendSubscriptionToBackend(subscriptionObject)
-		    return pushSubscription			
+
+			swReg.pushManager.subscribe(subscription).then(pushSubscription => {
+				let sub = JSON.stringify(pushSubscription)
+			    let subParsed = JSON.parse(sub)
+			    const subscriptionObject = {
+				  endpoint: subParsed.endpoint,
+				  keys: {
+				    p256dh: subParsed.keys.p256dh,
+				    auth: subParsed.keys.auth
+				  }
+				};
+				console.log("subscription sent...")
+				this.sendSubscriptionToBackend(subscriptionObject)
+			    return pushSubscription		
+			})
 		})
 		.catch(function(error) {
 		    console.error('Service Worker Error', error);
